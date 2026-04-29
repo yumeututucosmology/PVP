@@ -86,30 +86,37 @@ socket.on('start', (data) => {
 
 socket.on('state', (data) => {
     if (gameState !== 'playing') return;
+    
+    // サーバー上の全プレイヤーデータを処理
     for (const id in data.players) {
+        const serverPlayer = data.players[id];
+        
         if (id !== myId) {
-            if (!players[id]) {
-                players[id] = data.players[id];
-            }
-            // 補間用のターゲット座標と角度を更新
-            players[id].targetX = data.players[id].x;
-            players[id].targetY = data.players[id].y;
-            players[id].targetAngle = data.players[id].angle;
-            players[id].hp = data.players[id].hp;
+            // 他プレイヤー：矢と同じくサーバーの位置をそのまま反映（60fpsならこれで滑らか）
+            players[id] = serverPlayer;
         } else {
+            // 自分：基本は自分の計算を優先し、HPのみ同期
             if (players[myId]) {
-                players[myId].hp = data.players[myId].hp;
-                // ノックバックなどで大きく位置がズレた場合のみ同期
-                const dist = Math.hypot(players[myId].x - data.players[myId].x, players[myId].y - data.players[myId].y);
-                if (dist > 60) {
-                    players[myId].x = data.players[myId].x;
-                    players[myId].y = data.players[myId].y;
+                players[myId].hp = serverPlayer.hp;
+                // ノックバックなどで位置が大きくズレた場合（100px以上）のみ補正
+                const dist = Math.hypot(players[myId].x - serverPlayer.x, players[myId].y - serverPlayer.y);
+                if (dist > 100) {
+                    players[myId].x = serverPlayer.x;
+                    players[myId].y = serverPlayer.y;
                 }
             } else {
-                players[myId] = data.players[myId];
+                players[myId] = serverPlayer;
             }
         }
     }
+    
+    // 切断されたプレイヤーを削除
+    for (const id in players) {
+        if (!data.players[id]) {
+            delete players[id];
+        }
+    }
+    
     arrows = data.arrows;
 });
 
@@ -129,34 +136,10 @@ socket.on('playerLeft', () => {
     }
 });
 
-// 角度を滑らかに繋ぐための関数
-function lerpAngle(a, b, t) {
-    let d = b - a;
-    while (d > Math.PI) d -= Math.PI * 2;
-    while (d < -Math.PI) d += Math.PI * 2;
-    return a + d * t;
-}
-
-function interpolatePlayers() {
-    for (const id in players) {
-        if (id !== myId && players[id].targetX !== undefined) {
-            // 移動の補間
-            players[id].x += (players[id].targetX - players[id].x) * 0.3;
-            players[id].y += (players[id].targetY - players[id].y) * 0.3;
-
-            // 回転の補間
-            if (players[id].targetAngle !== undefined) {
-                players[id].angle = lerpAngle(players[id].angle, players[id].targetAngle, 0.3);
-            }
-        }
-    }
-}
-
 function checkMyArrowHits() {
     const ARROW_HIT_RADIUS = 10;
     for (let i = arrows.length - 1; i >= 0; i--) {
         const arrow = arrows[i];
-        // 自分が放った矢のみ判定（ responsiveness 重視）
         if (arrow.ownerId !== myId) continue;
 
         for (const id in players) {
@@ -167,9 +150,7 @@ function checkMyArrowHits() {
             const dist = Math.hypot(dx, dy);
 
             if (dist < config.playerRadius + ARROW_HIT_RADIUS) {
-                // サーバーに通知
                 socket.emit('hit', { targetId: id, arrowX: arrow.x, arrowY: arrow.y });
-                // ローカルの矢を即座に消す
                 arrows.splice(i, 1);
                 break;
             }
@@ -192,7 +173,6 @@ function update() {
 
     if (gameState !== 'playing') return;
     
-    interpolatePlayers();
     checkMyArrowHits();
 
     if (!gp) return;
