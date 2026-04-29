@@ -145,7 +145,7 @@ setInterval(() => {
 
         io.to(roomId).emit('state', { players: room.players, arrows: room.arrows });
     }
-}, 1000 / 60);
+}, 1000 / 30);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

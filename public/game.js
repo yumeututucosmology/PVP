@@ -17,6 +17,8 @@ let config = { playerRadius: 25 };
 
 let lastShootTime = 0;
 const SHOOT_COOLDOWN = 500;
+let lastSendTime = 0;
+const SEND_INTERVAL = 1000 / 30; // 30fpsで送信
 
 // Canvas setup
 function resizeCanvas() {
@@ -130,9 +132,9 @@ socket.on('playerLeft', () => {
 function interpolatePlayers() {
     for (const id in players) {
         if (id !== myId && players[id].targetX !== undefined) {
-            // 目標座標に向かって20%ずつ近づける（補間）
-            players[id].x += (players[id].targetX - players[id].x) * 0.2;
-            players[id].y += (players[id].targetY - players[id].y) * 0.2;
+            // 目標座標に向かって15%ずつ近づける（30fpsに合わせる）
+            players[id].x += (players[id].targetX - players[id].x) * 0.15;
+            players[id].y += (players[id].targetY - players[id].y) * 0.15;
         }
     }
 }
@@ -213,8 +215,11 @@ function update() {
         lastShootTime = now;
     }
 
-    // Send update to server
-    socket.emit('update', { x: me.x, y: me.y, angle: me.angle });
+    // Send update to server at 30fps
+    if (now - lastSendTime > SEND_INTERVAL) {
+        socket.emit('update', { x: me.x, y: me.y, angle: me.angle });
+        lastSendTime = now;
+    }
 }
 
 function draw() {
