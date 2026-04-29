@@ -83,27 +83,21 @@ io.on('connection', (socket) => {
         });
     });
 
-    socket.on('hit', (data) => {
-        if (room.state !== 'playing') return;
-        const targetId = data.targetId;
-        const p = room.players[targetId];
-        if (p) {
-            p.hp -= 10;
-            // ノックバック
-            const dx = p.x - data.arrowX;
-            const dy = p.y - data.arrowY;
-            const angle = Math.atan2(dy, dx);
-            p.x += Math.cos(angle) * KNOCKBACK_FORCE;
-            p.y += Math.sin(angle) * KNOCKBACK_FORCE;
-            
-            p.x = Math.max(PLAYER_RADIUS, Math.min(FIELD_WIDTH - PLAYER_RADIUS, p.x));
-            p.y = Math.max(PLAYER_RADIUS, Math.min(FIELD_HEIGHT - PLAYER_RADIUS, p.y));
+    socket.on('hitMe', (data) => {
+        if (!room.players[socket.id] || room.state !== 'playing') return;
+        const p = room.players[socket.id];
+        
+        p.hp -= 10;
+        
+        // 被弾側で計算されたノックバック位置などを同期
+        if (data.x !== undefined) p.x = data.x;
+        if (data.y !== undefined) p.y = data.y;
 
-            if (p.hp <= 0) {
-                io.to(targetRoomId).emit('gameOver', { winner: socket.id });
-                room.state = 'waiting';
-                room.arrows = [];
-            }
+        if (p.hp <= 0) {
+            p.hp = 0;
+            room.state = 'result';
+            const winnerId = Object.keys(room.players).find(id => id !== socket.id);
+            io.to(targetRoomId).emit('gameOver', { winner: winnerId });
         }
     });
 

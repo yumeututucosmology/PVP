@@ -88,7 +88,6 @@ socket.on('state', (data) => {
         } else {
             if (players[myId]) {
                 players[myId].hp = serverPlayer.hp;
-                // 自己位置の引き戻し閾値を300pxに拡大（ラバーバンディング防止）
                 const dist = Math.hypot(players[myId].x - serverPlayer.x, players[myId].y - serverPlayer.y);
                 if (dist > 300) {
                     players[myId].x = serverPlayer.x;
@@ -120,39 +119,41 @@ socket.on('playerLeft', () => {
     }
 });
 
-function checkMyArrowHits() {
-    const ARROW_HIT_RADIUS = 8; // より正確な判定のためわずかに絞る
-    const ARROW_SPEED = 15; // server.jsのARROW_SPEEDと合わせる
+// 自分への当たり判定チェック
+function checkHitsOnMe() {
+    const me = players[myId];
+    if (!me || gameState !== 'playing') return;
+
+    const ARROW_HIT_RADIUS = 10;
+    const ARROW_SPEED = 15;
 
     for (let i = arrows.length - 1; i >= 0; i--) {
         const arrow = arrows[i];
-        if (arrow.ownerId !== myId) continue;
+        if (arrow.ownerId === myId) continue;
 
-        // 【連続衝突判定】前のフレームからの移動軌跡を3段階でチェック
-        // これにより、キャラを「すり抜ける」現象を防止
         let hitFound = false;
         for (let step = 0; step <= 3; step++) {
             const ratio = step / 3;
-            // 現在地から過去方向に遡ってチェック
             const checkX = arrow.x - (Math.cos(arrow.angle) * ARROW_SPEED * (1 - ratio));
             const checkY = arrow.y - (Math.sin(arrow.angle) * ARROW_SPEED * (1 - ratio));
 
-            for (const id in players) {
-                if (id === myId) continue;
-                const p = players[id];
-                const dx = checkX - p.x;
-                const dy = checkY - p.y;
-                const dist = Math.hypot(dx, dy);
+            const dx = checkX - me.x;
+            const dy = checkY - me.y;
+            const dist = Math.hypot(dx, dy);
 
-                if (dist < config.playerRadius + ARROW_HIT_RADIUS) {
-                    socket.emit('hit', { targetId: id, arrowX: checkX, arrowY: checkY });
-                    arrows.splice(i, 1);
-                    hitFound = true;
-                    break;
-                }
+            if (dist < config.playerRadius + ARROW_HIT_RADIUS) {
+                // ノックバック計算
+                const kAngle = Math.atan2(me.y - checkY, me.x - checkX);
+                me.x += Math.cos(kAngle) * 40;
+                me.y += Math.sin(kAngle) * 40;
+                
+                socket.emit('hitMe', { x: me.x, y: me.y });
+                arrows.splice(i, 1);
+                hitFound = true;
+                break;
             }
-            if (hitFound) break;
         }
+        if (hitFound) break;
     }
 }
 
@@ -165,7 +166,10 @@ function update(dt) {
     }
 
     if (gameState !== 'playing') return;
-    checkMyArrowHits();
+    
+    // 自分が当たったかどうかを自分で判定
+    checkHitsOnMe();
+
     if (!gp) return;
 
     const me = players[myId];
@@ -174,7 +178,7 @@ function update(dt) {
     const moveX = gp.axes[0];
     const moveY = gp.axes[1];
     const threshold = 0.2;
-    const speed = 7 * dt; // DeltaTimeによる速度補正
+    const speed = 7 * dt;
 
     if (Math.abs(moveX) > threshold) me.x += moveX * speed;
     if (Math.abs(moveY) > threshold) me.y += moveY * speed;
