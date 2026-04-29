@@ -1,0 +1,13 @@
+{
+  "name": "pvp-archer",
+  "version": "1.0.0",
+  "description": "Simple 1v1 PVP Archer Game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1"
+  }
+}

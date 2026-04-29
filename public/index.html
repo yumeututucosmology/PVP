@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PVP Archer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <div id="title-screen" class="overlay">
+                <h1>PVP ARCHER</h1>
+                <p>Press Start or Click to Play</p>
+                <button id="start-btn">START</button>
+            </div>
+            <div id="matching-screen" class="overlay hidden">
+                <h2>Matching...</h2>
+                <p>Waiting for an opponent</p>
+            </div>
+            <div id="result-screen" class="overlay hidden">
+                <h2 id="result-text"></h2>
+                <p>Returning to Title...</p>
+            </div>
+        </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
