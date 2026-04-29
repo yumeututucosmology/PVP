@@ -9,7 +9,7 @@ const resultText = document.getElementById('result-text');
 const startBtn = document.getElementById('start-btn');
 
 let myId = null;
-let myIndex = null; // プレイヤー番号 (0 or 1)
+let myIndex = null;
 let gameState = 'title'; // title, matching, playing, result
 let players = {};
 let arrows = [];
@@ -18,9 +18,9 @@ let config = { playerRadius: 25 };
 let lastShootTime = 0;
 const SHOOT_COOLDOWN = 500;
 let lastSendTime = 0;
-const SEND_INTERVAL = 1000 / 60; // 60fpsに戻す
+const SEND_INTERVAL = 1000 / 60;
+let lastFrameTime = performance.now();
 
-// Canvas setup
 function resizeCanvas() {
     const targetWidth = 1280;
     const targetHeight = 720;
@@ -43,14 +43,11 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-// Gamepad handling
 function getGamepadState() {
     const gamepads = navigator.getGamepads();
-    // 自分のプレイヤー番号に対応するゲームパッドを優先的に使用
     if (myIndex !== null && gamepads[myIndex]) {
         return gamepads[myIndex];
     }
-    // 見つからない場合は最初に見つかったものを使用（オンライン対戦時など）
     for (const gp of gamepads) {
         if (gp) return gp;
     }
@@ -62,13 +59,10 @@ function startGame() {
         gameState = 'matching';
         titleScreen.classList.add('hidden');
         matchingScreen.classList.remove('hidden');
-        // The server automatically puts us in a room on connection
     }
 }
 
 startBtn.addEventListener('click', startGame);
-
-// Press any button to start
 window.addEventListener('keydown', startGame);
 
 socket.on('init', (data) => {
@@ -87,20 +81,16 @@ socket.on('start', (data) => {
 socket.on('state', (data) => {
     if (gameState !== 'playing') return;
     
-    // サーバー上の全プレイヤーデータを処理
     for (const id in data.players) {
         const serverPlayer = data.players[id];
-        
         if (id !== myId) {
-            // 他プレイヤー：矢と同じくサーバーの位置をそのまま反映（60fpsならこれで滑らか）
             players[id] = serverPlayer;
         } else {
-            // 自分：基本は自分の計算を優先し、HPのみ同期
             if (players[myId]) {
                 players[myId].hp = serverPlayer.hp;
-                // ノックバックなどで位置が大きくズレた場合（100px以上）のみ補正
+                // 自己位置の引き戻し閾値を300pxに拡大（ラバーバンディング防止）
                 const dist = Math.hypot(players[myId].x - serverPlayer.x, players[myId].y - serverPlayer.y);
-                if (dist > 100) {
+                if (dist > 300) {
                     players[myId].x = serverPlayer.x;
                     players[myId].y = serverPlayer.y;
                 }
@@ -110,13 +100,9 @@ socket.on('state', (data) => {
         }
     }
     
-    // 切断されたプレイヤーを削除
     for (const id in players) {
-        if (!data.players[id]) {
-            delete players[id];
-        }
+        if (!data.players[id]) delete players[id];
     }
-    
     arrows = data.arrows;
 });
 
@@ -124,9 +110,7 @@ socket.on('gameOver', (data) => {
     gameState = 'result';
     resultText.innerText = data.winner === myId ? 'YOU WIN!' : 'YOU LOSE';
     resultScreen.classList.remove('hidden');
-    setTimeout(() => {
-        location.reload();
-    }, 3000);
+    setTimeout(() => { location.reload(); }, 3000);
 });
 
 socket.on('playerLeft', () => {
@@ -158,49 +142,38 @@ function checkMyArrowHits() {
     }
 }
 
-function update() {
+function update(dt) {
     const gp = getGamepadState();
-    
-    // Auto-start with controller
     if (gameState === 'title' && gp) {
         for (let i = 0; i < gp.buttons.length; i++) {
-            if (gp.buttons[i].pressed) {
-                startGame();
-                break;
-            }
+            if (gp.buttons[i].pressed) { startGame(); break; }
         }
     }
 
     if (gameState !== 'playing') return;
-    
     checkMyArrowHits();
-
     if (!gp) return;
 
     const me = players[myId];
     if (!me) return;
 
-    // Movement (LS - axes 0, 1)
     const moveX = gp.axes[0];
     const moveY = gp.axes[1];
     const threshold = 0.2;
-    const speed = 6;
+    const speed = 7 * dt; // DeltaTimeによる速度補正
 
     if (Math.abs(moveX) > threshold) me.x += moveX * speed;
     if (Math.abs(moveY) > threshold) me.y += moveY * speed;
 
-    // Constrain to walls
     me.x = Math.max(config.playerRadius, Math.min(canvas.width - config.playerRadius, me.x));
     me.y = Math.max(config.playerRadius, Math.min(canvas.height - config.playerRadius, me.y));
 
-    // Aiming (RS - axes 2, 3)
     const aimX = gp.axes[2];
     const aimY = gp.axes[3];
     if (Math.abs(aimX) > threshold || Math.abs(aimY) > threshold) {
         me.angle = Math.atan2(aimY, aimX);
     }
 
-    // Shooting (RB - button index 5)
     const rbPressed = gp.buttons[5].pressed;
     const now = Date.now();
     if (rbPressed && now - lastShootTime > SHOOT_COOLDOWN) {
@@ -208,7 +181,6 @@ function update() {
         lastShootTime = now;
     }
 
-    // Send update to server at 30fps
     if (now - lastSendTime > SEND_INTERVAL) {
         socket.emit('update', { x: me.x, y: me.y, angle: me.angle });
         lastSendTime = now;
@@ -216,10 +188,13 @@ function update() {
 }
 
 function draw() {
+    const now = performance.now();
+    const dt = (now - lastFrameTime) / (1000 / 60);
+    lastFrameTime = now;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     if (gameState === 'playing' || gameState === 'result') {
-        // Draw arrows
         arrows.forEach(arrow => {
             ctx.save();
             ctx.translate(arrow.x, arrow.y);
@@ -234,15 +209,11 @@ function draw() {
             ctx.restore();
         });
 
-        // Draw players
         for (const id in players) {
             const p = players[id];
-            
-            // Draw player body
             ctx.save();
             ctx.translate(p.x, p.y);
             ctx.rotate(p.angle);
-            
             ctx.fillStyle = p.color;
             ctx.beginPath();
             ctx.arc(0, 0, config.playerRadius, 0, Math.PI * 2);
@@ -250,8 +221,6 @@ function draw() {
             ctx.strokeStyle = 'white';
             ctx.lineWidth = 3;
             ctx.stroke();
-
-            // Draw nose/pointer
             ctx.fillStyle = 'white';
             ctx.beginPath();
             ctx.moveTo(config.playerRadius, 0);
@@ -259,10 +228,8 @@ function draw() {
             ctx.lineTo(config.playerRadius - 10, 10);
             ctx.closePath();
             ctx.fill();
-
             ctx.restore();
 
-            // Draw HP bar
             const barWidth = 80;
             const barHeight = 10;
             const barY = p.y - config.playerRadius - 25;
@@ -277,7 +244,7 @@ function draw() {
     }
 
     requestAnimationFrame(() => {
-        update();
+        update(dt);
         draw();
     });
 }
