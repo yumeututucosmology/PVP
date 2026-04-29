@@ -171,6 +171,7 @@ function update(dt) {
     const lbPressed = gp.buttons[4].pressed;
     if (lbPressed && now - lastDashTime > DASH_COOLDOWN) {
         me.isDashing = true;
+        me.dashAngle = me.angle; // 発動時の向きを固定
         lastDashTime = now;
     }
     if (me.isDashing && now - lastDashTime > DASH_DURATION) {
@@ -181,10 +182,16 @@ function update(dt) {
     const moveY = gp.axes[1];
     const threshold = 0.2;
     let speed = 7 * dt;
-    if (me.isDashing) speed *= 3; // 突進中は3倍速
 
-    if (Math.abs(moveX) > threshold) me.x += moveX * speed;
-    if (Math.abs(moveY) > threshold) me.y += moveY * speed;
+    if (me.isDashing) {
+        // 突進中は固定された方向に3倍速で自動移動
+        me.x += Math.cos(me.dashAngle) * speed * 3;
+        me.y += Math.sin(me.dashAngle) * speed * 3;
+    } else {
+        // 通常時はスティック入力で移動
+        if (Math.abs(moveX) > threshold) me.x += moveX * speed;
+        if (Math.abs(moveY) > threshold) me.y += moveY * speed;
+    }
 
     // 重なり防止
     for (const id in players) {
