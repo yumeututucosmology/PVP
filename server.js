@@ -68,6 +68,7 @@ io.on('connection', (socket) => {
         room.players[socket.id].x = data.x;
         room.players[socket.id].y = data.y;
         room.players[socket.id].angle = data.angle;
+        room.players[socket.id].isDashing = data.isDashing; // ダッシュ状態を同期
     });
 
     socket.on('shoot', (data) => {
