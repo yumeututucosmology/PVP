@@ -183,6 +183,24 @@ function update(dt) {
     if (Math.abs(moveX) > threshold) me.x += moveX * speed;
     if (Math.abs(moveY) > threshold) me.y += moveY * speed;
 
+    // プレイヤー同士の衝突回避
+    for (const id in players) {
+        if (id === myId) continue;
+        const p = players[id];
+        const dx = me.x - p.x;
+        const dy = me.y - p.y;
+        const dist = Math.hypot(dx, dy);
+        const minDist = config.playerRadius * 2;
+
+        if (dist < minDist) {
+            // 重なっている場合、重なっている分だけ押し戻す
+            const angle = Math.atan2(dy, dx);
+            const overlap = minDist - dist;
+            me.x += Math.cos(angle) * overlap;
+            me.y += Math.sin(angle) * overlap;
+        }
+    }
+
     me.x = Math.max(config.playerRadius, Math.min(canvas.width - config.playerRadius, me.x));
     me.y = Math.max(config.playerRadius, Math.min(canvas.height - config.playerRadius, me.y));
 
