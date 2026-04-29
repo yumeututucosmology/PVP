@@ -91,10 +91,10 @@ socket.on('state', (data) => {
             if (!players[id]) {
                 players[id] = data.players[id];
             }
-            // 補間用のターゲット座標を更新
+            // 補間用のターゲット座標と角度を更新
             players[id].targetX = data.players[id].x;
             players[id].targetY = data.players[id].y;
-            players[id].angle = data.players[id].angle;
+            players[id].targetAngle = data.players[id].angle;
             players[id].hp = data.players[id].hp;
         } else {
             if (players[myId]) {
@@ -129,12 +129,25 @@ socket.on('playerLeft', () => {
     }
 });
 
+// 角度を滑らかに繋ぐための関数
+function lerpAngle(a, b, t) {
+    let d = b - a;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return a + d * t;
+}
+
 function interpolatePlayers() {
     for (const id in players) {
         if (id !== myId && players[id].targetX !== undefined) {
-            // 目標座標に向かって30%ずつ近づける（60fpsに合わせて追従性を上げる）
+            // 移動の補間
             players[id].x += (players[id].targetX - players[id].x) * 0.3;
             players[id].y += (players[id].targetY - players[id].y) * 0.3;
+
+            // 回転の補間
+            if (players[id].targetAngle !== undefined) {
+                players[id].angle = lerpAngle(players[id].angle, players[id].targetAngle, 0.3);
+            }
         }
     }
 }
