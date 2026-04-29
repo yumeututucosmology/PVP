@@ -121,23 +121,37 @@ socket.on('playerLeft', () => {
 });
 
 function checkMyArrowHits() {
-    const ARROW_HIT_RADIUS = 10;
+    const ARROW_HIT_RADIUS = 8; // より正確な判定のためわずかに絞る
+    const ARROW_SPEED = 15; // server.jsのARROW_SPEEDと合わせる
+
     for (let i = arrows.length - 1; i >= 0; i--) {
         const arrow = arrows[i];
         if (arrow.ownerId !== myId) continue;
 
-        for (const id in players) {
-            if (id === myId) continue;
-            const p = players[id];
-            const dx = arrow.x - p.x;
-            const dy = arrow.y - p.y;
-            const dist = Math.hypot(dx, dy);
+        // 【連続衝突判定】前のフレームからの移動軌跡を3段階でチェック
+        // これにより、キャラを「すり抜ける」現象を防止
+        let hitFound = false;
+        for (let step = 0; step <= 3; step++) {
+            const ratio = step / 3;
+            // 現在地から過去方向に遡ってチェック
+            const checkX = arrow.x - (Math.cos(arrow.angle) * ARROW_SPEED * (1 - ratio));
+            const checkY = arrow.y - (Math.sin(arrow.angle) * ARROW_SPEED * (1 - ratio));
 
-            if (dist < config.playerRadius + ARROW_HIT_RADIUS) {
-                socket.emit('hit', { targetId: id, arrowX: arrow.x, arrowY: arrow.y });
-                arrows.splice(i, 1);
-                break;
+            for (const id in players) {
+                if (id === myId) continue;
+                const p = players[id];
+                const dx = checkX - p.x;
+                const dy = checkY - p.y;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist < config.playerRadius + ARROW_HIT_RADIUS) {
+                    socket.emit('hit', { targetId: id, arrowX: checkX, arrowY: checkY });
+                    arrows.splice(i, 1);
+                    hitFound = true;
+                    break;
+                }
             }
+            if (hitFound) break;
         }
     }
 }
